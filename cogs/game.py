@@ -157,6 +157,11 @@ class GameCog(commands.Cog):
             await ctx.send(f"{self.blue_boss.display_name} es el nuevo jefe del equipo azul")
 
 
+    @commands.command()
+    async def pruebatumismo(self, ctx):
+        await ctx.send("Las figuras de cuatro lados se llaman cuadriláteros. Pero los lados tienen que ser rectos, y la figura tiene que ser bidimensional. Prueba tú mismo ...")
+
+
     @commands.guild_only()
     @commands.command(aliases=["unirse"])
     async def join(self, ctx, team : str = None):
@@ -214,13 +219,13 @@ class GameCog(commands.Cog):
     @commands.guild_only()
     @commands.command(aliases=["jugadores"])
     async def players(self, ctx):
-        blue_team = ", ".join("{0}{1}{0}".format("*" if player == self.blue_boss else "", player.display_name) for player in self.blue_team)
+        blue_team = ", ".join("{0}{1}{0}".format("**" if player == self.blue_boss else "", player.display_name) for player in self.blue_team)
         red_team = ", ".join("{0}{1}{0}".format("**" if player == self.red_boss else "", player.display_name) for player in self.red_team)
         if not red_team:
             red_team = "-"
         if not blue_team:
             blue_team = "-"
-        return await ctx.send("Equipo rojo: {}\nEquipo azul: {}".format(red_team, blue_team))
+        return await ctx.send("Equipo azul: {}\nEquipo rojo: {}".format(blue_team, red_team))
 
 
     @commands.guild_only()
