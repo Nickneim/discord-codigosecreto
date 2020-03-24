@@ -358,7 +358,7 @@ class CodigoSecreto():
 class GameCog(commands.Cog):
 
     wordlist = None
-    with open("cogs/wordlist.txt") as f:
+    with open("cogs/wordlist.txt", encoding='utf-8') as f:
         wordlist = f.read().split()
 
 
