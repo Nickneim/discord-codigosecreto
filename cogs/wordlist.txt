@@ -244,7 +244,7 @@ grifo
 corona
 telescopio
 destino
-nuevaYork
+nueva york
 médico
 veneno
 sahára
@@ -312,7 +312,7 @@ radio
 cura
 goma
 embajada
-lagoNess
+lago ness
 iglesia
 pantalla
 cara

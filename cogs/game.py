@@ -359,7 +359,8 @@ class GameCog(commands.Cog):
 
     wordlist = None
     with open("cogs/wordlist.txt", encoding='utf-8') as f:
-        wordlist = f.read().split()
+        for line in f:
+            wordlist.append(f.strip().lower())
 
 
     boards = []
