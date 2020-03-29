@@ -177,10 +177,12 @@ class CodigoSecreto():
     async def new_spymaster(self, spymaster : discord.Member):
         if spymaster in self.blue_team:
             self.blue_spymaster = spymaster
-            await self.channel.send(f"{self.blue_spymaster.display_name} es el nuevo jefe de espías del equipo azul.")
+            await self.channel.send(escape_markdown(self.blue_spymaster.display_name) +
+                                    " es el nuevo jefe de espías del equipo azul.")
         elif spymaster in self.red_team:
             self.red_spymaster = spymaster
-            await self.channel.send(f"{self.red_spymaster.display_name} es el nuevo jefe de espías del equipo rojo.")
+            await self.channel.send(escape_markdown(self.red_spymaster.display_name) + 
+                                    " es el nuevo jefe de espías del equipo rojo.")
         else:
             await self.channel.send(f"{spymaster.display_name} no está en ningún equipo.")
 
@@ -213,14 +215,14 @@ class CodigoSecreto():
         if self.blue_spymaster == player:
             self.blue_spymaster = None
             if self.blue_team:
-                new_spymaster = choice(self.blue_team)
+                new_spymaster = choice(list(self.blue_team))
                 await self.new_spymaster(new_spymaster)
             else:
                 await self.channel.send("El equipo azul ya no tiene jefe de espías.")
         if self.red_spymaster == player:
             self.red_spymaster = None
             if self.red_team:
-                new_spymaster = choice(self.red_team)
+                new_spymaster = choice(list(self.red_team))
                 await self.new_spymaster(new_spymaster)
             else:
                 await self.channel.send("El equipo rojo ya no tiene jefe de espías.")
@@ -245,6 +247,7 @@ class CodigoSecreto():
             if len(message_words) != 2:
                 return False
             clue, amount = message_words
+            clue = clue.lower()
             try:
                 amount = int(amount)
             except ValueError:
@@ -352,15 +355,22 @@ class CodigoSecreto():
             self.turn = 2
         else:
             self.turn = 1
+        
+        if self.blue_agents == 0:
+            return 1
+        elif self.red_agents == 0:
+            return 2
+        elif codename_type == 3:
+            return self.turn
     
 
 
 class GameCog(commands.Cog):
 
-    wordlist = None
+    wordlist = []
     with open("cogs/wordlist.txt", encoding='utf-8') as f:
         for line in f:
-            wordlist.append(f.strip().lower())
+            wordlist.append(line.strip().lower())
 
 
     boards = []
@@ -469,8 +479,6 @@ class GameCog(commands.Cog):
             game.rotate_board()
         game.blue_agents = len([x for x in game.board if x == 1])
         game.red_agents = len([x for x in game.board if x == 2])
-        print(game.blue_agents)
-        print(game.red_agents)
         if game.blue_agents >= game.red_agents:
             game.turn = 1
         else:
@@ -491,12 +499,14 @@ class GameCog(commands.Cog):
         game.started = True
         game.stopping = False
         while not game.stopping:
-            await game.round()
+            result = await game.round()
         await ctx.send("El juego ha finalizado!")
-        if game.blue_agents == 0:
+        if result == 1:
             await ctx.send("¡Victoria para el equipo azul!")
-        if game.red_agents == 0:
+        elif result == 2:
             await ctx.send("¡Victoria para el equipo rojo!")
+        else:
+            await ctx.send("Victoria para el equipo... " + str(result) + "?")
 
     @start.after_invoke
     async def after_start(self, ctx : commands.Context):
@@ -505,8 +515,8 @@ class GameCog(commands.Cog):
         game.red_team = set()
         game.blue_team = set()
         game.revealed = [False] * 25
-        game.red_boss = None
-        game.blue_boss = None
+        game.red_spymaster = None
+        game.blue_spymaster = None
         game.started = False
         game.stopping = False
 
@@ -520,8 +530,8 @@ class GameCog(commands.Cog):
         game.red_team = set()
         game.blue_team = set()
         game.revealed = [False] * 25
-        game.red_boss = None
-        game.blue_boss = None
+        game.red_spymaster = None
+        game.blue_spymaster = None
         game.started = False
         game.stopping = False
 
