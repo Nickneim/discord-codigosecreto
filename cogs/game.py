@@ -1,7 +1,7 @@
 from PIL import Image, ImageDraw, ImageFont
 import discord
 import asyncio
-from random import sample, choice
+from random import sample, choice, shuffle
 from discord.ext import commands
 from typing import List, Set, Dict, Union
 from discord.utils import escape_markdown
@@ -86,7 +86,6 @@ class CodigoSecreto():
         self.started : bool = False
         self.stopping : bool = False
         self.board_image : Image.Image = None
-
 
     def reveal_type(self, codename_index : int):
         draw = ImageDraw.Draw(self.board_image)
@@ -363,6 +362,36 @@ class CodigoSecreto():
         elif codename_type == 3:
             return self.turn
     
+    async def start(self, wordlist : List[str]):
+        self.codenames = sample(wordlist, 25)
+        self.revealed = [False] * 25
+        self.board = [0] * 7 + [1] * 8 + [2] * 8 + [3] + [choice((1, 2))]
+        shuffle(self.board)
+        self.blue_agents = len([x for x in self.board if x == 1])
+        self.red_agents = len([x for x in self.board if x == 2])
+        if self.blue_agents >= self.red_agents:
+            self.turn = 1
+        else:
+            self.turn = 2
+
+        spymaster_board_image = self.draw_board(spymaster=True)
+        self.board_image = self.draw_board()
+        with io.BytesIO() as f:
+            try:
+                spymaster_board_image.save(f, format='png')
+            except IOError:
+                return await self.channel.send("No se pudo crear la imagen del mapa de jefe de espías")
+            f.seek(0)
+            await self.blue_spymaster.send(file=discord.File(f, filename='spymaster_board.png'))
+            f.seek(0)
+            await self.red_spymaster.send(file=discord.File(f, filename='spymaster_board.png'))
+        await self.send_board_image()
+        self.started = True
+        self.stopping = False
+        while not self.stopping:
+            result = await self.round()
+        return result
+
 
 
 class GameCog(commands.Cog):
@@ -465,41 +494,14 @@ class GameCog(commands.Cog):
 
 
     @commands.check(enough_players_check)
-    @commands.check(game_not_started_check)
+    @commands.check(game_not_started_check)  # should actually be redundant because of the max_concurrency check
     @commands.check(game_exists_check)
     @commands.guild_only()
     @commands.max_concurrency(1, commands.BucketType.channel)
     @commands.command(aliases=["empezar", "go"])
     async def start(self, ctx):
         game : CodigoSecreto = self.channels[ctx.channel.id]
-        game.codenames = sample(self.wordlist, 25)
-        game.revealed = [False] * 25
-        game.board = choice(self.boards)
-        for _ in range(choice([0, 1, 2, 3])):
-            game.rotate_board()
-        game.blue_agents = len([x for x in game.board if x == 1])
-        game.red_agents = len([x for x in game.board if x == 2])
-        if game.blue_agents >= game.red_agents:
-            game.turn = 1
-        else:
-            game.turn = 2
-
-        boss_board_image = game.draw_board(spymaster=True)
-        game.board_image = game.draw_board()
-        with io.BytesIO() as f:
-            try:
-                boss_board_image.save(f, format='png')
-            except IOError:
-                return await ctx.send("No se pudo crear la imagen del mapa de jefe de espías")
-            f.seek(0)
-            await game.blue_spymaster.send(file=discord.File(f, filename='spymaster_board.png'))
-            f.seek(0)
-            await game.red_spymaster.send(file=discord.File(f, filename='spymaster_board.png'))
-        await game.send_board_image()
-        game.started = True
-        game.stopping = False
-        while not game.stopping:
-            result = await game.round()
+        result = await game.start(self.wordlist)
         await ctx.send("El juego ha finalizado!")
         if result == 1:
             await ctx.send("¡Victoria para el equipo azul!")
@@ -508,32 +510,16 @@ class GameCog(commands.Cog):
         else:
             await ctx.send("Victoria para el equipo... " + str(result) + "?")
 
-    @start.after_invoke
+    @start.after_invoke  # only called if it passes all checks
     async def after_start(self, ctx : commands.Context):
-        game : CodigoSecreto = self.channels[ctx.channel.id]
-        game.players = set()
-        game.red_team = set()
-        game.blue_team = set()
-        game.revealed = [False] * 25
-        game.red_spymaster = None
-        game.blue_spymaster = None
-        game.started = False
-        game.stopping = False
+        del self.channels[ctx.channel.id]
 
 
     @commands.check(game_not_started_check)
     @commands.check(game_exists_check)
     @commands.command()
     async def reset(self, ctx : commands.Context):
-        game : CodigoSecreto = self.channels[ctx.channel.id]
-        game.players = set()
-        game.red_team = set()
-        game.blue_team = set()
-        game.revealed = [False] * 25
-        game.red_spymaster = None
-        game.blue_spymaster = None
-        game.started = False
-        game.stopping = False
+        del self.channels[ctx.channel.id]
 
 
     @commands.Cog.listener("on_command_error")
