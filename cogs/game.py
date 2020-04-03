@@ -117,7 +117,7 @@ class CodigoSecreto():
             for x in range(5):
                 codename_index = y * 5 + x
                 codename_type = self.board[codename_index]
-                text = self.codenames[codename_index].capitalize()
+                text = self.codenames[codename_index].title()
                 if not spymaster:
                     color = "white"
                     font_color = "black"
@@ -173,7 +173,7 @@ class CodigoSecreto():
             await self.channel.send(escape_markdown(self.red_spymaster.display_name) + 
                                     " es el nuevo jefe de espías del equipo rojo.")
         else:
-            await self.channel.send(f"{spymaster.display_name} no está en ningún equipo.")
+            await self.channel.send(f"{escape_markdown(spymaster.display_name)} no está en ningún equipo.")
 
 
     async def add_player(self, player : discord.Member,
@@ -181,12 +181,12 @@ class CodigoSecreto():
         self.players.add(player)
         if red_team:
             self.red_team.add(player)
-            await self.channel.send(f"{player.display_name} se ha unido al equipo rojo")
+            await self.channel.send(f"{escape_markdown(player.display_name)} se ha unido al equipo rojo")
             if self.red_spymaster is None:
                 await self.new_spymaster(player)
         else:
             self.blue_team.add(player)
-            await self.channel.send(f"{player.display_name} se ha unido al equipo azul")
+            await self.channel.send(f"{escape_markdown(player.display_name)} se ha unido al equipo azul")
             if self.blue_spymaster is None:
                 await self.new_spymaster(player)
 
@@ -215,7 +215,7 @@ class CodigoSecreto():
                 await self.new_spymaster(new_spymaster)
             else:
                 await self.channel.send("El equipo rojo ya no tiene jefe de espías.")
-        await self.channel.send(f"{player.display_name} ha abandonado la partida.")
+        await self.channel.send(f"{escape_markdown(player.display_name)} ha abandonado la partida.")
 
 
     def get_current_spymaster(self):
@@ -295,18 +295,18 @@ class CodigoSecreto():
             self.revealed[codename_index] = True
             codename_type = self.board[codename_index]
             if codename_type == 0:
-                await self.channel.send(f"{codename} es un civil")
+                await self.channel.send(f"{codename.title()} es un civil")
             elif codename_type == 1:
                 self.blue_agents -= 1
-                await self.channel.send(f"{codename} es un agente azul")
+                await self.channel.send(f"{codename.title()} es un agente azul")
             elif codename_type == 2:
                 self.red_agents -= 1
-                await self.channel.send(f"{codename} es un agente rojo")
+                await self.channel.send(f"{codename.title()} es un agente rojo")
             elif codename_type == 3:
-                await self.channel.send(f"{codename} es un asesino!")
+                await self.channel.send(f"{codename.title()} es un asesino!")
                 self.stopping = True
             else:
-                await self.channel.send(f"{codename} es de tipo {codename_type} (BUG)")
+                await self.channel.send(f"{codename.title()} es de tipo {codename_type} (BUG)")
 
             self.reveal_type(codename_index)
             await self.send_board_image()
