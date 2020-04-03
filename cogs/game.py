@@ -86,9 +86,9 @@ class CodigoSecreto():
         self.started : bool = False
         self.stopping : bool = False
         self.board_image : Image.Image = None
+        self.board_draw : ImageDraw.Draw = None
 
     def reveal_type(self, codename_index : int):
-        draw = ImageDraw.Draw(self.board_image)
         card_width = 600 // 5
         card_height = 400 // 5
         codename_type = self.board[codename_index]
@@ -104,7 +104,7 @@ class CodigoSecreto():
         y = codename_index // 5
         x0, y0 = x * card_width, y * card_height
         x1, y1 = x0 + card_width - 1, y0 + card_height - 1
-        draw.rectangle((x0, y0, x1, y1), color, "black", 1)
+        self.board_draw.rectangle((x0, y0, x1, y1), color, "black", 1)
 
 
     def draw_board(self, spymaster=False):
@@ -118,7 +118,7 @@ class CodigoSecreto():
                 codename_index = y * 5 + x
                 codename_type = self.board[codename_index]
                 text = self.codenames[codename_index].capitalize()
-                if not spymaster and not self.revealed[codename_index]:
+                if not spymaster:
                     color = "white"
                     font_color = "black"
                 elif codename_type == 0:
@@ -150,17 +150,7 @@ class CodigoSecreto():
                 font_x = x * card_width + (card_width - font_width) // 2
                 font_y = y * card_height + (card_height - font_height) // 2
                 draw.text((font_x, font_y), text, font_color, font)
-        return image
-
-
-    def rotate_board(self):
-        new_board = [0] * 25
-        for x in range(5):
-            for y in range(5):
-                new_x = 4 - y
-                new_y = x
-                new_board[new_y * 5 + new_x] = self.board[y * 5 + x]
-        self.board = new_board
+        return image, draw
 
 
     async def send_board_image(self):
@@ -228,36 +218,56 @@ class CodigoSecreto():
         await self.channel.send(f"{player.display_name} ha abandonado la partida.")
 
 
-    async def round(self):
+    def get_current_spymaster(self):
         if self.turn == 1:
-            spymaster = self.blue_spymaster
-            team = self.blue_team
+            return self.blue_spymaster
         else:
-            spymaster = self.red_spymaster
-            team = self.red_team
+            return self.red_spymaster
+    
+    def get_current_team(self):
+        if self.turn == 1:
+            return self.blue_team
+        else:
+            return self.red_team
 
-        await self.channel.send(f"{spymaster.display_name}, dí una palabra y un número")
 
+    def is_valid_clue(self, message : discord.Message):
+        if message.channel != self.channel or message.author != self.get_current_spymaster():
+            return False
+        message_words = message.content.split()
+        if len(message_words) != 2:
+            return False
+        clue, amount = message_words
+        try:
+            amount = int(amount)
+        except ValueError:
+            return False
+        if amount < 0:
+            return False
+        clue = clue.lower()
+        if clue in self.codenames and not self.revealed[self.codenames.index(clue)]:
+            return False
+        return True
 
-        def is_valid_clue(message):
-            if message.channel != self.channel or message.author != spymaster:
-                return False
-            message_words = message.content.split()
-            if len(message_words) != 2:
-                return False
-            clue, amount = message_words
-            clue = clue.lower()
-            try:
-                amount = int(amount)
-            except ValueError:
-                return False
-            if amount < 0:
-                return False
-            if clue in self.codenames and not self.revealed[self.codenames.index(clue)]:
-                return False
+    def is_valid_codename(self, message : discord.Message):
+        if message.channel != self.channel or message.author not in self.get_current_team():
+            return False
+        if message.author == self.get_current_spymaster():
+            return False
+        answer = message.content.strip().lower()
+        if answer == "pasar turno":
             return True
-        
-        message = await self.bot.wait_for('message', check=is_valid_clue)
+        if answer not in self.codenames:
+            return False
+        if self.revealed[self.codenames.index(answer)]:
+            return False
+        return True
+
+    async def round(self):
+        spymaster = self.get_current_spymaster()
+
+        await self.channel.send(f"**{escape_markdown(spymaster.display_name)}**, dí una palabra y un número")
+        message = await self.bot.wait_for('message', check=self.is_valid_clue)
         await message.add_reaction("✅")
 
         _, amount = message.content.split()
@@ -267,65 +277,20 @@ class CodigoSecreto():
                 amount = -1
         except ValueError:
             amount = -1
-
-        def is_valid_codename(message):
-            if message.channel != self.channel or message.author not in team:
-                return False
-            if message.author == spymaster:
-                return False
-            answer = message.content.strip().lower()
-            if answer == "pasar turno":
-                return True
-            if answer not in self.codenames:
-                return False
-            if self.revealed[self.codenames.index(answer)]:
-                return False
-            return True
-
         await self.channel.send("Ahora tu equipo debe encontrar tus espías.")
-        codename = None
-        while codename is None:
-            message = await self.bot.wait_for('message', check=is_valid_codename)
-            codename = message.content.strip().lower()
-            if codename == "pasar turno":
-                await self.channel.send("Tienes que adivinar al menos una palabra")
-                codename = None
-        
-        await message.add_reaction("✅")
-
-        codename_index = self.codenames.index(codename)
-        self.revealed[codename_index] = True
-        codename_type = self.board[codename_index]
-        if codename_type == 0:
-            await self.channel.send(f"{codename} es un civil")
-        elif codename_type == 1:
-            self.blue_agents -= 1
-            await self.channel.send(f"{codename} es un agente azul")
-        elif codename_type == 2:
-            self.red_agents -= 1
-            await self.channel.send(f"{codename} es un agente rojo")
-        elif codename_type == 3:
-            await self.channel.send(f"{codename} es un asesino!")
-            self.stopping = True
-        else:
-            await self.channel.send(f"{codename} es de tipo {codename_type} (BUG)")
-
-
-        self.reveal_type(codename_index)
-        await self.send_board_image()
-
-        if self.blue_agents == 0 or self.red_agents == 0:
-            self.stopping = True
-
-        if codename_type == self.turn and not self.stopping:
-            await self.channel.send("Puedes continuar adivinando o 'pasar turno'")
-
+        codename_type = self.turn
+        can_skip_turn : bool = False
         while codename_type == self.turn and amount != 0 and not self.stopping:
-            message = await self.bot.wait_for('message', check=is_valid_codename)
-            await message.add_reaction("✅")
+            if can_skip_turn:
+                await self.channel.send("Puedes continuar adivinando o `pasar turno`")
+            message = await self.bot.wait_for('message', check=self.is_valid_codename)
             codename = message.content.strip().lower()
             if codename == "pasar turno":
-                break
+                if can_skip_turn:
+                    break
+                await self.channel.send("Tienes que adivinar al menos una palabra")
+                continue
+            can_skip_turn = True
             codename_index = self.codenames.index(codename)
             self.revealed[codename_index] = True
             codename_type = self.board[codename_index]
@@ -374,8 +339,8 @@ class CodigoSecreto():
         else:
             self.turn = 2
 
-        spymaster_board_image = self.draw_board(spymaster=True)
-        self.board_image = self.draw_board()
+        spymaster_board_image, _ = self.draw_board(spymaster=True)
+        self.board_image, self.board_draw = self.draw_board(spymaster=False)
         with io.BytesIO() as f:
             try:
                 spymaster_board_image.save(f, format='png')
@@ -401,11 +366,6 @@ class GameCog(commands.Cog):
         for line in f:
             wordlist.append(line.strip().lower())
 
-
-    boards = []
-    with open("cogs/codename_boards.txt") as f:
-        for board in f:
-            boards.append([int(x) for x in board.strip()])
 
     def __init__(self, bot):
         self.bot = bot
