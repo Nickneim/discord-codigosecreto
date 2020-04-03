@@ -12,6 +12,9 @@ SMALL_FONT = ImageFont.truetype("fonts/Open_Sans/OpenSans-Bold.ttf", 14)
 MEDIUM_FONT = ImageFont.truetype("fonts/Open_Sans/OpenSans-Bold.ttf", 18)
 LARGE_FONT = ImageFont.truetype("fonts/Open_Sans/OpenSans-Bold.ttf", 24)
 
+PICTURE_WIDTH = 200
+PICTURE_HEIGHT = int(PICTURE_WIDTH * 506 / 801)
+PICTURE_AMOUNT = 278
 
 class GameDoesNotExistError(commands.CheckFailure):
     pass
@@ -234,6 +237,13 @@ class CodigoSecreto():
         else:
             return self.red_team
 
+    def get_codename_index(self, codename):
+        try:
+            return self.codenames.index(codename.lower())
+        except ValueError:
+            return None
+    
+
     def is_valid_clue(self, message : discord.Message):
         if message.channel != self.channel or message.author != self.get_current_spymaster():
             return False
@@ -247,16 +257,11 @@ class CodigoSecreto():
             return False
         if amount < 0:
             return False
-        clue = clue.lower()
-        if clue in self.codenames and not self.revealed[self.codenames.index(clue)]:
+        codename_index = self.get_codename_index(clue)
+        if codename_index is not None and not self.revealed[codename_index]:
             return False
         return True
 
-    def get_codename_index(self, codename):
-        try:
-            return self.codenames.index(codename.lower())
-        except ValueError:
-            return None
 
     def is_valid_codename(self, message : discord.Message):
         if message.channel != self.channel or message.author not in self.get_current_team():
@@ -268,7 +273,7 @@ class CodigoSecreto():
             return True
         codename_index = self.get_codename_index(answer)
         if codename_index is None:
-            return None
+            return False
         if self.revealed[codename_index]:
             return False
         return True
@@ -367,13 +372,78 @@ class CodigoSecreto():
             f.seek(0)
             await self.red_spymaster.send(file=discord.File(f, filename='spymaster_board.png'))
         await self.send_board_image()
-        self.started = True
         self.stopping = False
         while not self.stopping:
             result = await self.round()
         return result
 
 
+class CodigoSecretoImagenes(CodigoSecreto):
+    
+    AGENT_AMOUNT = 7
+    CARD_WIDTH = PICTURE_WIDTH
+    CARD_HEIGHT = PICTURE_HEIGHT
+    ROWS = 5
+    COLUMNS = 4
+
+    def __init__(self, codigo_secreto : CodigoSecreto):
+        self.bot : commands.Bot = codigo_secreto.bot
+        self.channel : discord.TextChannel = codigo_secreto.channel
+        self.players : Set[discord.Member] = codigo_secreto.players
+        self.red_team : Set[discord.Member] = codigo_secreto.red_team
+        self.blue_team : Set[discord.Member] = codigo_secreto.blue_team
+        self.red_spymaster : discord.Member = codigo_secreto.red_spymaster
+        self.blue_spymaster : discord.Member = codigo_secreto.blue_spymaster
+        self.started : bool = codigo_secreto.started
+
+
+    def draw_board(self, spymaster=False):
+        card_width = self.CARD_WIDTH
+        card_height = self.CARD_HEIGHT
+        image = Image.new("RGB", (card_width * self.COLUMNS, card_height * self.ROWS))
+        draw = ImageDraw.Draw(image)
+
+        for y in range(self.ROWS):
+            for x in range(self.COLUMNS):
+                codename_index = y * self.COLUMNS + x
+                codename_type = self.board[codename_index]
+                if not spymaster:
+                    color = "white"
+                elif codename_type == 0:
+                    color = "khaki"
+                elif codename_type == 1:
+                    color = "cyan"
+                elif codename_type == 2:
+                    color = "red"
+                else:
+                    color = "silver"
+
+                x0, y0 = x * card_width, y * card_height
+                x1, y1 = x0 + card_width - 1, y0 + card_height - 1
+                draw.rectangle((x0, y0, x1, y1), color, "black", 1)
+                image.paste(self.codenames[codename_index], box=(x0, y0), mask=self.codenames[codename_index].getchannel('A'))
+                if y == 0:
+                    draw.text((x0 + 2, y0 - 4), chr(65+x), fill="black", font=MEDIUM_FONT)
+        return image, draw
+
+    
+    def get_codename_index(self, codename):
+        codename = codename.replace(' ', '')
+        if len(codename) != 2:
+            return None
+        column = ord(codename[0].upper()) - 65
+        if not (0 <= column < self.COLUMNS):
+            return None
+        try:
+            row = int(codename[1]) - 1
+        except ValueError:
+            return None
+        if not (0 <= row < self.ROWS):
+            return None
+        return row * self.COLUMNS + column
+
+    def format_codename(self, codename):
+        return codename.replace(' ', '').upper()
 
 class GameCog(commands.Cog):
 
@@ -382,6 +452,9 @@ class GameCog(commands.Cog):
         for line in f:
             wordlist.append(line.strip().lower())
 
+    picturelist = []
+    for i in range(PICTURE_AMOUNT):
+        picturelist.append(Image.open(f'pictures/picture_{i}.png').resize((PICTURE_WIDTH, PICTURE_HEIGHT)))
 
     def __init__(self, bot):
         self.bot = bot
@@ -475,9 +548,15 @@ class GameCog(commands.Cog):
     @commands.guild_only()
     @commands.max_concurrency(1, commands.BucketType.channel)
     @commands.command(aliases=["empezar", "go"])
-    async def start(self, ctx):
+    async def start(self, ctx, mode="normal"):
         game : CodigoSecreto = self.channels[ctx.channel.id]
-        result = await game.start(self.wordlist)
+        game.started = True
+        if mode.strip().lower() in ["imagen", "imágen", "imágenes", "imagenes", "picture", "pictures", "i", "p"]:
+            game = CodigoSecretoImagenes(game)
+            self.channels[ctx.channel.id] = game
+            result = await game.start(self.picturelist)
+        else:
+            result = await game.start(self.wordlist)
         await ctx.send("El juego ha finalizado!")
         if result == 1:
             await ctx.send("¡Victoria para el equipo azul!")
