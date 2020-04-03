@@ -81,16 +81,20 @@ class CodigoSecreto():
         self.red_agents : int = 0
         self.board : List[int] = []
         self.revealed : List[bool] = []
-        self.codenames : List[str] = []
+        self.codenames : List = []
         self.turn : int = 1 # 1=blue, 2=red
         self.started : bool = False
         self.stopping : bool = False
         self.board_image : Image.Image = None
         self.board_draw : ImageDraw.Draw = None
 
+
+    AGENT_AMOUNT = 8
+    CARD_WIDTH = 120
+    CARD_HEIGHT = 80
+    ROWS = 5
+    COLUMNS = 5
     def reveal_type(self, codename_index : int):
-        card_width = 600 // 5
-        card_height = 400 // 5
         codename_type = self.board[codename_index]
         if codename_type == 0:
             color = "khaki"
@@ -100,22 +104,22 @@ class CodigoSecreto():
             color = "red"
         else:
             color = "black"
-        x = codename_index % 5
-        y = codename_index // 5
-        x0, y0 = x * card_width, y * card_height
-        x1, y1 = x0 + card_width - 1, y0 + card_height - 1
+        x = codename_index % self.COLUMNS
+        y = codename_index // self.COLUMNS
+        x0, y0 = x * self.CARD_WIDTH, y * self.CARD_HEIGHT
+        x1, y1 = x0 + self.CARD_WIDTH - 1, y0 + self.CARD_HEIGHT - 1
         self.board_draw.rectangle((x0, y0, x1, y1), color, "black", 1)
 
 
     def draw_board(self, spymaster=False):
-        image = Image.new("RGB", (600, 400))
+        card_width = self.CARD_WIDTH
+        card_height = self.CARD_HEIGHT
+        image = Image.new("RGB", (card_width * self.COLUMNS, card_height * self.ROWS))
         draw = ImageDraw.Draw(image)
-        card_width = 600 // 5
-        card_height = 400 // 5
 
-        for y in range(5):
-            for x in range(5):
-                codename_index = y * 5 + x
+        for y in range(self.ROWS):
+            for x in range(self.COLUMNS):
+                codename_index = y * self.COLUMNS + x
                 codename_type = self.board[codename_index]
                 text = self.codenames[codename_index].title()
                 if not spymaster:
@@ -230,7 +234,6 @@ class CodigoSecreto():
         else:
             return self.red_team
 
-
     def is_valid_clue(self, message : discord.Message):
         if message.channel != self.channel or message.author != self.get_current_spymaster():
             return False
@@ -249,6 +252,12 @@ class CodigoSecreto():
             return False
         return True
 
+    def get_codename_index(self, codename):
+        try:
+            return self.codenames.index(codename.lower())
+        except ValueError:
+            return None
+
     def is_valid_codename(self, message : discord.Message):
         if message.channel != self.channel or message.author not in self.get_current_team():
             return False
@@ -257,11 +266,15 @@ class CodigoSecreto():
         answer = message.content.strip().lower()
         if answer == "pasar turno":
             return True
-        if answer not in self.codenames:
-            return False
-        if self.revealed[self.codenames.index(answer)]:
+        codename_index = self.get_codename_index(answer)
+        if codename_index is None:
+            return None
+        if self.revealed[codename_index]:
             return False
         return True
+
+    def format_codename(self, codename):
+        return codename.title()
 
     async def round(self):
         spymaster = self.get_current_spymaster()
@@ -288,25 +301,26 @@ class CodigoSecreto():
             if codename == "pasar turno":
                 if can_skip_turn:
                     break
-                await self.channel.send("Tienes que adivinar al menos una palabra")
+                await self.channel.send("Tienes que adivinar al menos un agente.")
                 continue
             can_skip_turn = True
-            codename_index = self.codenames.index(codename)
+            codename_index = self.get_codename_index(codename)
             self.revealed[codename_index] = True
             codename_type = self.board[codename_index]
+            formatted_codename = self.format_codename(codename)
             if codename_type == 0:
-                await self.channel.send(f"{codename.title()} es un civil")
+                await self.channel.send(f"{formatted_codename} es un civil")
             elif codename_type == 1:
                 self.blue_agents -= 1
-                await self.channel.send(f"{codename.title()} es un agente azul")
+                await self.channel.send(f"{formatted_codename} es un agente azul")
             elif codename_type == 2:
                 self.red_agents -= 1
-                await self.channel.send(f"{codename.title()} es un agente rojo")
+                await self.channel.send(f"{formatted_codename} es un agente rojo")
             elif codename_type == 3:
-                await self.channel.send(f"{codename.title()} es un asesino!")
+                await self.channel.send(f"{formatted_codename} es un asesino!")
                 self.stopping = True
             else:
-                await self.channel.send(f"{codename.title()} es de tipo {codename_type} (BUG)")
+                await self.channel.send(f"{formatted_codename} es de tipo {codename_type} (BUG)")
 
             self.reveal_type(codename_index)
             await self.send_board_image()
@@ -327,10 +341,12 @@ class CodigoSecreto():
         elif codename_type == 3:
             return self.turn
     
-    async def start(self, wordlist : List[str]):
-        self.codenames = sample(wordlist, 25)
-        self.revealed = [False] * 25
-        self.board = [0] * 7 + [1] * 8 + [2] * 8 + [3] + [choice((1, 2))]
+    async def start(self, codenames : List):
+        card_amount = self.ROWS * self.COLUMNS
+        self.codenames = sample(codenames, card_amount)
+        self.revealed = [False] * card_amount
+        self.board = [1] * self.AGENT_AMOUNT + [2] * self.AGENT_AMOUNT + [3] + [choice((1, 2))]
+        self.board += [0] * (card_amount - len(self.board))
         shuffle(self.board)
         self.blue_agents = len([x for x in self.board if x == 1])
         self.red_agents = len([x for x in self.board if x == 2])
