@@ -8,7 +8,9 @@ import traceback
 initial_extensions = ['cogs.game']
 
 prefix = ("cs.", "cS.", "Cs.", "CS.")
-bot = commands.Bot(command_prefix=prefix)
+help_command = commands.DefaultHelpCommand(verify_checks=False)
+print(help_command.show_hidden)
+bot = commands.Bot(command_prefix=prefix, help_command=help_command)
 
 if __name__ == '__main__':
     for extension in initial_extensions:

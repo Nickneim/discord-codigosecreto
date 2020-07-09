@@ -293,6 +293,8 @@ class CodigoSecreto():
             amount = int(amount)
             if amount == 0:
                 amount = -1
+            else:
+                amount += 1
         except ValueError:
             amount = -1
         await self.channel.send("Ahora tu equipo debe encontrar tus espías.")
@@ -461,7 +463,7 @@ class GameCog(commands.Cog):
         self.channels : Dict[int, CodigoSecreto] = {}
 
 
-    @commands.command()
+    @commands.command(hidden=True)
     async def pruebatumismo(self, ctx):
         await ctx.send("Las figuras de cuatro lados se llaman cuadriláteros. Pero los lados tienen que ser rectos, y la figura tiene que ser bidimensional. Prueba tú mismo ...")
 
@@ -469,8 +471,9 @@ class GameCog(commands.Cog):
     @commands.check(game_not_started_check)
     @commands.guild_only()
     @commands.max_concurrency(1, commands.BucketType.channel, wait=True)
-    @commands.command(aliases=["unirse"])
+    @commands.command(aliases=["unirse"], hidden=False)
     async def join(self, ctx : commands.Context, team : str = None):
+        """Unirse a la partida"""
         channel_id : int = ctx.channel.id
         if channel_id not in self.channels:
             game : CodigoSecreto = CodigoSecreto(self.bot, ctx.channel)
@@ -496,8 +499,9 @@ class GameCog(commands.Cog):
     @commands.check(game_exists_check)
     @commands.guild_only()
     @commands.max_concurrency(1, commands.BucketType.channel, wait=True)
-    @commands.command(aliases=["jefe", "boss", "lider", "leader"])
+    @commands.command(aliases=["jefe", "boss", "lider", "leader"], hidden=False)
     async def spymaster(self, ctx : commands.Context):
+        """Declararse jefe de espías de tu equipo"""
         try:
             game : CodigoSecreto = self.channels[ctx.channel.id]
         except KeyError:
@@ -572,7 +576,7 @@ class GameCog(commands.Cog):
 
     @commands.check(game_not_started_check)
     @commands.check(game_exists_check)
-    @commands.command()
+    @commands.command(hidden=False)
     async def reset(self, ctx : commands.Context):
         del self.channels[ctx.channel.id]
 
